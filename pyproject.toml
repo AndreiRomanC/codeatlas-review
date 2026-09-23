@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codeatlas-review"
+version = "0.1.0"
+description = "Deterministic reference index for spec-grounded automotive code review"
+requires-python = ">=3.9"
+dependencies = [
+  "PyYAML>=6.0,<7",
+  "tree-sitter>=0.23.2,<0.24",
+  "tree-sitter-c>=0.21.4,<0.22",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+include = ["codeatlas*"]

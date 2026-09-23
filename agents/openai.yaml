@@ -1,0 +1,7 @@
+interface:
+  display_name: "CodeAtlas Review"
+  short_description: "Spec-grounded automotive code review"
+  default_prompt: "Use $codeatlas-review to review this automotive module against its specification and selected indexed references."
+
+policy:
+  allow_implicit_invocation: true

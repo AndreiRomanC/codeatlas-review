@@ -1,0 +1,46 @@
+version: 1
+database: .codeatlas/codeatlas.db
+cache_dir: .codeatlas/cache
+
+index:
+  include:
+    - "**/*.c"
+    - "**/*.h"
+    - "**/*.grl"
+    - "**/*.grl2"
+  exclude:
+    - "**/.git/**"
+    - "**/build/**"
+    - "**/target/**"
+  max_file_bytes: 5000000
+  artifact_kinds:
+    grr:
+      - ".grl"
+      - ".grl2"
+
+repositories:
+  example-reference:
+    module: "ExampleModule"
+    url: "<USER_PROVIDED_REPOSITORY_URL>"
+    revisions:
+      - name: "<branch-or-tag>"
+        ref: "<branch-or-tag>"
+        kind: "branch"
+
+  example-local:
+    module: "ExampleModule"
+    local_path: "<USER_PROVIDED_LOCAL_PATH>"
+    revisions:
+      - name: "working-tree"
+        ref: "WORKTREE"
+        kind: "local"
+
+specification:
+  # Temporary local provider. Replace with the future LIMAS adapter without
+  # changing the review workflow.
+  provider: "folder_txt"
+  roots:
+    - "<USER_PROVIDED_SPECIFICATION_ROOT>"
+  directory_pattern: "**/{module}/d"
+  recursive: false
+  max_file_bytes: 250000
