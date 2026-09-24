@@ -13,11 +13,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Report whether a CodeAtlas index is stale")
     parser.add_argument("--module", required=True)
     parser.add_argument("--config", required=True)
+    parser.add_argument("--summary", action="store_true", help="Return totals instead of per-revision details")
     args = parser.parse_args()
 
     def action():
         config = load_config(args.config)
-        return {"module": args.module, "database": str(config.database), **index_status(config, args.module)}
+        result = {"module": args.module, "database": str(config.database), **index_status(config, args.module)}
+        if args.summary:
+            repositories = result.pop("repositories")
+            result["summary"] = {
+                "revisions": len(repositories),
+                "stale_revisions": sum(item["stale"] for item in repositories),
+                "indexed": bool(result["initialized"] and repositories)
+                and all(item["indexed"] for item in repositories),
+            }
+        return result
 
     return run_cli(action)
 

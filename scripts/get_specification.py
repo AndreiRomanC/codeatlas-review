@@ -20,7 +20,9 @@ def main() -> int:
 
     def action():
         config = load_config(args.config)
-        provider = provider_from_config(config.specification, base_dir=config.path.parent)
+        provider = provider_from_config(
+            config.specification, base_dir=config.path.parent, codeatlas_config=config
+        )
         result = provider.get(
             SpecificationRequest(args.module, args.feature, args.revision, args.document)
         )

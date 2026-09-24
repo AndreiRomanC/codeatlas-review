@@ -34,6 +34,23 @@ def initialize(path: Path, schema: Optional[Path] = None) -> sqlite3.Connection:
         version = connection.execute(
             "SELECT value FROM schema_metadata WHERE key = 'schema_version'"
         ).fetchone()
+        if version is not None and version["value"] == "1":
+            connection.execute("ALTER TABLE entities ADD COLUMN structural_hash TEXT")
+            connection.execute("ALTER TABLE entities ADD COLUMN structural_signature TEXT")
+            connection.execute("UPDATE schema_metadata SET value = '2' WHERE key = 'schema_version'")
+            connection.commit()
+            version = connection.execute(
+                "SELECT value FROM schema_metadata WHERE key = 'schema_version'"
+            ).fetchone()
+        if version is not None and version["value"] == "2":
+            connection.execute("ALTER TABLE entities ADD COLUMN similarity_method TEXT")
+            connection.execute("ALTER TABLE entities ADD COLUMN similarity_fingerprint TEXT")
+            connection.execute("ALTER TABLE entities ADD COLUMN token_count INTEGER")
+            connection.execute("UPDATE schema_metadata SET value = '3' WHERE key = 'schema_version'")
+            connection.commit()
+            version = connection.execute(
+                "SELECT value FROM schema_metadata WHERE key = 'schema_version'"
+            ).fetchone()
         if version is None or version["value"] != SCHEMA_VERSION:
             connection.close()
             value = version["value"] if version is not None else "missing"

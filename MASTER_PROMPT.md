@@ -1,90 +1,55 @@
-# CodeAtlas Review — Master Prompt for Codex
+# CodeAtlas Review — Current Design Contract
 
-Implement and harden the attached `CodeAtlas_Review` starter as a reusable AI Agent Skill.
+Improve the existing CodeAtlas Review implementation incrementally. Preserve working behavior and database compatibility; do not rebuild the project merely to change its AI integration layer.
 
-## Objective
-Create a spec-grounded review system for automotive software. It must use historical/reference implementations as non-authoritative evidence without loading entire repositories into LLM context.
+## Primary rule: script first, AI second
 
-## Fundamental split
-**Scripts do deterministic mechanics. The LLM does orchestration and reasoning.**
+Use deterministic CodeAtlas commands for repository acquisition, revision discovery, parsing, extraction, exact hashing, similarity fingerprints, indexing, filtering, grouping, searching, and retrieval. Do not use the model as a search engine for facts that these commands can establish.
 
-Scripts must handle repository acquisition, deterministic parsing, normalization, SHA-256 hashing, deduplication, SQLite indexing, candidate search, and exact retrieval. The LLM decides what evidence is relevant and performs the semantic review.
+Use model reasoning for specification interpretation, relevance selection, semantic differences, risk assessment, and review findings. If a repeatable deterministic operation is missing, add a small bounded command instead of repeatedly performing ad-hoc shell searches.
 
-## Source-of-truth rule
-The applicable specification is authoritative. Reference code can be wrong, old, project-specific, or based on another specification revision. Never mark code correct merely because references do the same thing, and never mark it wrong merely because it differs. Explicitly flag conflicts between common historical patterns and the specification.
+## Source of truth
 
-## Required workflow
-1. User requests review of a module/file/function/GRR artifact.
-2. Resolve repository/module/revision from configuration or parameters; do not hard-code company paths.
-3. Ensure required reference repositories are locally available. Clone/fetch safely only when needed.
-4. Reuse the SQLite index if current; support incremental refresh and forced rebuild.
-5. Parse source deterministically. Do not use the LLM to find function boundaries.
-6. Extract function name, signature where possible, file, start/end lines, body, normalized body, and SHA-256 content hash.
-7. Deduplicate identical normalized entities across repositories/revisions, while preserving every occurrence and provenance.
-8. Index GRR as a first-class artifact. Initially use robust file-level indexing: hash, path, size, line count, identifiers/names, full content stored once. Only create GRR sub-entities after inspecting real examples.
-9. Search returns only a compact candidate catalog: ID, kind/name, repo, revision, path, line range/size, hash prefix, and useful metadata.
-10. The LLM selects only a few IDs (normally 2–4).
-11. A separate retrieval command returns full content for selected IDs.
-12. Obtain the relevant specification through a configurable adapter. Do not invent LIMAS/internal API details.
-13. Review target against specification first; use references for patterns, edge cases, drift, and questions.
-14. Fetch more context only on demand.
+The applicable specification is authoritative. Reference implementations are non-authoritative evidence and may be wrong, obsolete, project-specific, or based on a different specification revision. Report conflicts between reference consensus and the specification explicitly.
 
-## SQLite
-Use the provided generic schema as a starting point, not a fixed final design. Keep repositories, revisions, files, deduplicated entities, and occurrences. Make the DB reusable for future searches such as “find this function everywhere.” Use parameterized SQL and useful indexes.
+## Indexed engineering memory
 
-The entity hash is our own SHA-256 over normalized extracted content; it is NOT a Git commit hash.
+SQLite is a general reference index containing repositories, revisions, files, entities, occurrences, identifiers, index runs, and errors. Preserve repository, revision, resolved commit, path, and line provenance.
 
-## Parsing
-Prefer, based on what is permitted in the real environment:
-1. existing approved project parser/tool;
-2. tree-sitter C;
-3. libclang/Clang;
-4. another robust parser;
-5. clearly documented bootstrap fallback.
+Store exact content once and preserve every occurrence. Exact normalized SHA-256 answers whether implementations are identical. A separate versioned token fingerprint ranks approximate similarity. Never store all function-to-function pairs.
 
-Inspect representative real C before finalizing parsing/normalization. Normalization must be conservative enough not to collapse semantically different code.
+## Controlled retrieval
 
-## Repository acquisition
-Implement `fetch_repos.py` with configurable module/repo mapping, local cache, revision selection, and existing authentication. Never store credentials. Never reset/clean/push/commit reference repositories. Detect local modifications and fail safely.
+Use two stages:
 
-## Retrieval commands
-Provide machine-readable JSON CLIs conceptually like:
-- `fetch_repos.py --module MODULE --config config.yaml`
-- `build_index.py --module MODULE --config config.yaml`
-- `index_status.py --module MODULE --config config.yaml`
-- `find_references.py --kind function --name NAME --limit 10 --db ...`
-- `get_reference.py --id ID --db ...`
-- GRR search by identifier/name.
+1. compact search metadata, exact implementation grouping, or similarity ranking;
+2. full retrieval only for selected IDs.
 
-Add strict result/content limits to prevent context explosion.
+Never send complete repositories, database dumps, or large collections of implementations to the model. Use bounded deterministic source-context search only when indexed entities do not contain the required context.
 
-## Specification adapter
-Create an interface for the real specification provider. The user will later supply where/how specs are accessed. If unavailable, report that explicitly rather than pretending.
+## Repository and runtime behavior
 
-## Review output
-Separate:
-- Summary
-- Specification findings
-- Defects / risks
-- Reference comparison
-- Drift / inconsistencies
-- Uncertainties / missing evidence
-- Recommended checks
+- Resolve repositories and revisions from configuration.
+- Fetch configured remote refs rather than relying on incidental local branches.
+- Use CodeAtlas-owned mirrors and immutable snapshots.
+- Never reset, clean, commit, push, or modify configured source repositories.
+- Discover a compatible Python interpreter, preferring an explicit setting, AURA/project venv, or approved company installation.
+- Do not install Python automatically or embed credentials.
 
-Every reference comparison should preserve provenance (repo/revision/file/entity/lines).
+## Artifacts and specification
 
-## Tests
-Add tests for deterministic hashing, duplicate bodies across revisions, same name/different body, occurrence preservation, parser line ranges, schema initialization/migration, search limits, retrieval by ID, GRR deduplication, malformed input, and Windows/macOS/Linux path handling where practical.
+Keep GRL/GRR indexing simple in V1: file-level exact deduplication, deterministic identifier extraction, bounded definition retrieval, and provenance. Do not invent a complete grammar.
 
-## Before calling it production-ready
-Inspect:
-- real C examples;
-- real GRR examples;
-- repository and branch/tag/label conventions;
-- permitted parser dependencies;
-- specification access;
-- representative index size and indexing time.
+Use the `folder_txt` provider for current specifications in module `d` folders. Prefer repository/revision-backed roots when the specification is versioned with code. Keep LIMAS as a future adapter behind the same interface.
 
-If information is missing, leave a clean adapter/TODO. Do not guess company-specific details.
+## Copilot integration
 
-Treat the attached starter as an architectural proposal. Improve or replace parts when the real environment shows a better design.
+The Python package, SQLite schema, configuration, and tests remain independent. GitHub Copilot uses the thin project skill in `.github/skills/codeatlas-review/`, following the AURA pattern of a short `SKILL.md` router with conditional references and deterministic scripts.
+
+Do not copy the database or repository caches into the skill. Keep `.codeatlas/` local and ignored. Integrate into AURA later through a thin versioned wrapper or package dependency after the core behavior is stable.
+
+## Validation requirements
+
+Test remote revision acquisition, interpreter selection, exact deduplication, occurrence preservation, different implementations, high/low similarity, compact search without bodies, targeted retrieval, GRL lookup/deduplication, repository-backed specifications, and the real representative ERRM files when available.
+
+Success means CodeAtlas can establish where implementations/configuration exist, which variants are identical or similar, and which revisions contain them. The AI then explains why differences matter and whether the target complies with its specification.

@@ -27,8 +27,8 @@ repositories:
 
 specification:
   provider: "folder_txt"
-  roots:
-    - ".codeatlas/github-test-cache/snapshots/github-errm-selct-emivar-test/4be6c85f398e75007dc8b1772096c8e0a712febe"
+  repository: "github-errm-selct-emivar-test"
+  revision: "main"
   directory_pattern: "agf/{module}/d"
   recursive: false
   max_file_bytes: 250000

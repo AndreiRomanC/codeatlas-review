@@ -7,7 +7,15 @@ from codeatlas.config import load_config
 from codeatlas.database import open_existing
 from codeatlas.errors import CodeAtlasError
 from codeatlas.indexer import index_module, index_status
-from codeatlas.search import find_references, get_reference
+from codeatlas.c_parser import extract_functions
+from codeatlas.search import (
+    extract_grl_definitions,
+    find_references,
+    find_similar_functions,
+    get_reference,
+    list_implementations,
+    rank_grl_identifiers,
+)
 
 
 FUNCTION_V1 = """static int Sample_Function(void)
@@ -82,13 +90,22 @@ def test_dedup_occurrences_incremental_refresh_and_retrieval(tmp_path: Path):
 
     catalog = find_references(config.database, kind="function", name="Sample_Function", limit=10)
     assert catalog["count"] == 2
+    assert all("content" not in item for item in catalog["results"])
     assert catalog["results"][0]["id"] == catalog["results"][1]["id"]
+    grouped = list_implementations(config.database, "Sample_Function")
+    assert grouped["unique_implementations"] == 1
+    assert grouped["total_occurrences"] == 2
     reference = get_reference(config.database, catalog["results"][0]["id"])
     assert len(reference["reference"]["occurrences"]) == 2
     assert "return 1" in reference["reference"]["content"]
 
     by_identifier = find_references(config.database, identifier="c_sample_limit", limit=10)
     assert by_identifier["count"] == 2
+    definitions = extract_grl_definitions(config.database, "c_sample_limit")
+    assert definitions["count"] == 2
+    assert all("value = 10" in item["definition"] for item in definitions["results"])
+    ranked = rank_grl_identifiers(config.database)
+    assert any(item["identifier"] == "c_sample_limit" for item in ranked["results"])
     assert index_status(config, "ERRM")["stale"] is False
 
     (second / "src" / "sample.c").write_text(FUNCTION_V2, encoding="utf-8")
@@ -102,6 +119,16 @@ def test_dedup_occurrences_incremental_refresh_and_retrieval(tmp_path: Path):
         "SELECT COUNT(*) FROM occurrences o JOIN entities e ON e.id = o.entity_id WHERE e.kind = 'function'"
     ).fetchone()[0] == 2
     connection.close()
+
+    grouped = list_implementations(config.database, "Sample_Function")
+    assert grouped["unique_implementations"] == 2
+    target = extract_functions(FUNCTION_V1.encode("utf-8"))[0]
+    similar = find_similar_functions(
+        config.database, target_function=target, candidate_name="Sample_Function"
+    )
+    assert similar["method"] == "c-token-shingles-v1"
+    assert similar["count"] == 2
+    assert similar["results"][0]["score"] >= 0.8
 
 
 @pytest.mark.parametrize("limit", [-1, 0, 51])
@@ -117,4 +144,3 @@ def test_missing_reference_is_explicit(tmp_path: Path):
     index_module(config, "ERRM")
     with pytest.raises(CodeAtlasError, match="not found"):
         get_reference(config.database, 999999)
-

@@ -5,8 +5,8 @@ from typing import Any, Callable, Dict
 from .errors import CodeAtlasError
 
 
-def emit(payload: Dict[str, Any], *, stream: Any = sys.stdout) -> None:
-    print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True), file=stream)
+def emit(payload: Dict[str, Any], *, stream: Any = sys.stdout, pretty: bool = False) -> None:
+    print(json.dumps(payload, indent=2 if pretty else None, ensure_ascii=False, sort_keys=True), file=stream)
 
 
 def run_cli(action: Callable[[], Dict[str, Any]]) -> int:

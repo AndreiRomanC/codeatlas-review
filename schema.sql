@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
     value TEXT NOT NULL
 );
 
-INSERT OR IGNORE INTO schema_metadata(key, value) VALUES ('schema_version', '1');
+INSERT OR IGNORE INTO schema_metadata(key, value) VALUES ('schema_version', '3');
 
 CREATE TABLE IF NOT EXISTS repositories (
     id INTEGER PRIMARY KEY,
@@ -59,6 +59,11 @@ CREATE TABLE IF NOT EXISTS entities (
     name TEXT NOT NULL,
     signature TEXT,
     normalized_hash TEXT NOT NULL,
+    structural_hash TEXT,
+    structural_signature TEXT,
+    similarity_method TEXT,
+    similarity_fingerprint TEXT,
+    token_count INTEGER,
     blob_id INTEGER NOT NULL,
     metadata_json TEXT NOT NULL DEFAULT '{}',
     UNIQUE(kind, name, normalized_hash),
@@ -113,5 +118,7 @@ CREATE INDEX IF NOT EXISTS idx_files_hash ON files(content_hash);
 CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
 CREATE INDEX IF NOT EXISTS idx_entities_kind ON entities(kind);
 CREATE INDEX IF NOT EXISTS idx_entities_hash ON entities(normalized_hash);
+CREATE INDEX IF NOT EXISTS idx_entities_structural_hash ON entities(structural_hash);
+CREATE INDEX IF NOT EXISTS idx_entities_similarity_method ON entities(similarity_method);
 CREATE INDEX IF NOT EXISTS idx_occurrences_entity ON occurrences(entity_id);
 CREATE INDEX IF NOT EXISTS idx_artifact_identifiers_identifier ON artifact_identifiers(identifier);

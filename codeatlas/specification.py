@@ -184,19 +184,73 @@ class FolderTxtSpecificationProvider:
         )
 
 
-def _folder_txt_provider(
-    settings: Mapping[str, Any], base_dir: Optional[Path]
-) -> FolderTxtSpecificationProvider:
-    roots_raw = settings.get("roots")
-    if not isinstance(roots_raw, list) or not roots_raw:
-        raise ConfigurationError("folder_txt specification provider requires a non-empty roots list")
-    root_base = (base_dir or Path.cwd()).resolve()
-    roots: List[Path] = []
-    for value in roots_raw:
-        if not isinstance(value, str) or not value:
-            raise ConfigurationError("Specification roots must be non-empty path strings")
-        path = Path(value).expanduser()
-        roots.append((root_base / path).resolve() if not path.is_absolute() else path.resolve())
+class RepositoryFolderTxtSpecificationProvider:
+    def __init__(
+        self,
+        codeatlas_config: Any,
+        repository_name: str,
+        revision_name: Optional[str],
+        *,
+        directory_pattern: str,
+        recursive: bool,
+        max_file_bytes: int,
+    ) -> None:
+        self.config = codeatlas_config
+        self.repository_name = repository_name
+        self.revision_name = revision_name
+        self.directory_pattern = directory_pattern
+        self.recursive = recursive
+        self.max_file_bytes = max_file_bytes
+
+    def get(self, request: SpecificationRequest) -> SpecificationResult:
+        from .repository import source_revision
+
+        repositories = [item for item in self.config.repositories if item.name == self.repository_name]
+        if len(repositories) != 1:
+            raise ConfigurationError(
+                f"Specification repository not found or ambiguous: {self.repository_name}"
+            )
+        repository = repositories[0]
+        requested_revision = request.revision or self.revision_name
+        if requested_revision:
+            revisions = [
+                item
+                for item in repository.revisions
+                if item.name == requested_revision or item.ref == requested_revision
+            ]
+        else:
+            revisions = list(repository.revisions)
+        if len(revisions) != 1:
+            raise ConfigurationError(
+                "Specification revision must identify exactly one configured repository revision"
+            )
+        source = source_revision(self.config, repository, revisions[0])
+        delegate = FolderTxtSpecificationProvider(
+            (source.root,),
+            directory_pattern=self.directory_pattern,
+            recursive=self.recursive,
+            max_file_bytes=self.max_file_bytes,
+        )
+        result = delegate.get(request)
+        provenance = dict(result.provenance or {})
+        provenance.update(
+            {
+                "repository": repository.name,
+                "revision": source.revision_name,
+                "resolved_commit": source.resolved_commit,
+                "revision_verified": source.resolved_commit != "WORKTREE",
+            }
+        )
+        return SpecificationResult(
+            available=result.available,
+            provider=result.provider,
+            message=result.message,
+            content=result.content,
+            provenance=provenance,
+        )
+
+
+def _folder_options(settings: Mapping[str, Any]) -> Tuple[str, bool, int]:
     pattern = settings.get("directory_pattern", "**/{module}/d")
     if not isinstance(pattern, str) or "{module}" not in pattern:
         raise ConfigurationError("specification.directory_pattern must contain {module}")
@@ -216,22 +270,58 @@ def _folder_txt_provider(
     max_file_bytes = settings.get("max_file_bytes", 250_000)
     if not isinstance(max_file_bytes, int) or not 1 <= max_file_bytes <= 1_000_000:
         raise ConfigurationError("specification.max_file_bytes must be between 1 and 1000000")
+    return normalized_pattern, recursive, max_file_bytes
+
+
+def _folder_txt_provider(
+    settings: Mapping[str, Any], base_dir: Optional[Path], codeatlas_config: Optional[Any]
+) -> SpecificationProvider:
+    pattern, recursive, max_file_bytes = _folder_options(settings)
+    repository_name = settings.get("repository")
+    if repository_name is not None:
+        if not isinstance(repository_name, str) or not repository_name:
+            raise ConfigurationError("specification.repository must be a non-empty string")
+        if codeatlas_config is None:
+            raise ConfigurationError("Repository-backed specification requires CodeAtlas configuration")
+        revision_name = settings.get("revision")
+        if revision_name is not None and (not isinstance(revision_name, str) or not revision_name):
+            raise ConfigurationError("specification.revision must be a non-empty string")
+        return RepositoryFolderTxtSpecificationProvider(
+            codeatlas_config,
+            repository_name,
+            revision_name,
+            directory_pattern=pattern,
+            recursive=recursive,
+            max_file_bytes=max_file_bytes,
+        )
+    roots_raw = settings.get("roots")
+    if not isinstance(roots_raw, list) or not roots_raw:
+        raise ConfigurationError(
+            "folder_txt specification provider requires either repository or a non-empty roots list"
+        )
+    root_base = (base_dir or Path.cwd()).resolve()
+    roots: List[Path] = []
+    for value in roots_raw:
+        if not isinstance(value, str) or not value:
+            raise ConfigurationError("Specification roots must be non-empty path strings")
+        path = Path(value).expanduser()
+        roots.append((root_base / path).resolve() if not path.is_absolute() else path.resolve())
     return FolderTxtSpecificationProvider(
         tuple(roots),
-        directory_pattern=normalized_pattern,
+        directory_pattern=pattern,
         recursive=recursive,
         max_file_bytes=max_file_bytes,
     )
 
 
 def provider_from_config(
-    settings: Mapping[str, Any], *, base_dir: Optional[Path] = None
+    settings: Mapping[str, Any], *, base_dir: Optional[Path] = None, codeatlas_config: Optional[Any] = None
 ) -> SpecificationProvider:
     name = settings.get("provider", "unconfigured")
     if name in {None, "", "unconfigured"}:
         return UnconfiguredSpecificationProvider()
     if name == "folder_txt":
-        return _folder_txt_provider(settings, base_dir)
+        return _folder_txt_provider(settings, base_dir, codeatlas_config)
     raise ConfigurationError(
         f"Specification provider '{name}' is not implemented; add an approved adapter instead of guessing"
     )

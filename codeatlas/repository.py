@@ -104,6 +104,55 @@ def prepare_module(config: CodeAtlasConfig, module: str, *, update: bool = True)
     return [prepare_repository(config, repo, update=update) for repo in config.repositories_for_module(module)]
 
 
+def list_available_revisions(
+    config: CodeAtlasConfig, module: str, *, update: bool = False
+) -> Dict[str, Any]:
+    repositories = []
+    for repository in config.repositories_for_module(module):
+        prepare_repository(config, repository, update=update)
+        location, bare = _git_location(config, repository)
+        output = _git_at(
+            location,
+            bare,
+            [
+                "for-each-ref",
+                "--format=%(refname)%09%(objectname)%09%(objecttype)",
+                "refs/heads",
+                "refs/remotes",
+                "refs/tags",
+            ],
+        )
+        refs = []
+        for line in output.splitlines():
+            refname, object_name, object_type = line.split("\t", 2)
+            if refname.endswith("/HEAD"):
+                continue
+            if refname.startswith("refs/tags/"):
+                kind = "tag"
+            elif refname.startswith("refs/remotes/"):
+                kind = "remote-branch"
+            else:
+                kind = "branch"
+            refs.append(
+                {
+                    "name": refname.split("/", 2)[-1],
+                    "ref": refname,
+                    "kind": kind,
+                    "object": object_name,
+                    "object_type": object_type,
+                }
+            )
+        repositories.append(
+            {
+                "repository": repository.name,
+                "module": repository.module,
+                "source_type": repository.source_type,
+                "refs": refs,
+            }
+        )
+    return {"module": module, "repositories": repositories}
+
+
 def _git_location(config: CodeAtlasConfig, repository: RepositoryConfig) -> Tuple[Path, bool]:
     if repository.local_path is not None:
         if not _is_git_repository(repository.local_path):
@@ -123,6 +172,7 @@ def _git_at(location: Path, bare: bool, arguments: List[str]) -> str:
 
 
 def _safe_extract_archive(process: subprocess.Popen, destination: Path) -> None:
+    """Extract regular files from git archive without invoking a shell or touching the index."""
     assert process.stdout is not None
     try:
         with tarfile.open(fileobj=process.stdout, mode="r|") as archive:

@@ -4,6 +4,7 @@ from typing import Any, Iterator, List, Optional
 
 from .errors import ParserUnavailableError
 from .hashing import decode_text, normalized_text_and_hash
+from .similarity import SIMILARITY_METHOD, fingerprint_function
 
 
 @dataclass(frozen=True)
@@ -13,6 +14,9 @@ class CFunction:
     content: str
     normalized_content: str
     normalized_hash: str
+    similarity_method: str
+    similarity_fingerprint: str
+    token_count: int
     start_line: int
     end_line: int
     start_byte: int
@@ -76,6 +80,7 @@ def extract_functions(data: bytes) -> List[CFunction]:
         signature = source[node.start_byte:body.start_byte].decode("utf-8", errors="replace").strip()
         content = source[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
         normalized, digest = normalized_text_and_hash(content)
+        similarity_fingerprint, token_count = fingerprint_function(node, source)
         functions.append(
             CFunction(
                 name=name,
@@ -83,6 +88,9 @@ def extract_functions(data: bytes) -> List[CFunction]:
                 content=content,
                 normalized_content=normalized,
                 normalized_hash=digest,
+                similarity_method=SIMILARITY_METHOD,
+                similarity_fingerprint=similarity_fingerprint,
+                token_count=token_count,
                 start_line=node.start_point.row + 1,
                 end_line=node.end_point.row + 1,
                 start_byte=node.start_byte,

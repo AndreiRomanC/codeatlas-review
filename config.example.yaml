@@ -37,10 +37,12 @@ repositories:
 
 specification:
   # Temporary local provider. Replace with the future LIMAS adapter without
-  # changing the review workflow.
+  # changing the review workflow. Use either roots or repository + revision.
   provider: "folder_txt"
   roots:
     - "<USER_PROVIDED_SPECIFICATION_ROOT>"
+  # repository: "example-reference"
+  # revision: "<branch-or-tag>"
   directory_pattern: "**/{module}/d"
   recursive: false
   max_file_bytes: 250000

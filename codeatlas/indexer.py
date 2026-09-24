@@ -94,17 +94,49 @@ def _entity_id(
     name: str,
     signature: Optional[str],
     normalized_hash: str,
+    similarity_method: Optional[str],
+    similarity_fingerprint: Optional[str],
+    token_count: Optional[int],
     blob_id: int,
     metadata: Mapping[str, Any],
 ) -> int:
     connection.execute(
         """
         INSERT OR IGNORE INTO entities(
-            kind, name, signature, normalized_hash, blob_id, metadata_json
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            kind, name, signature, normalized_hash, similarity_method,
+            similarity_fingerprint, token_count, blob_id, metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (kind, name, signature, normalized_hash, blob_id, json.dumps(metadata, sort_keys=True)),
+        (
+            kind,
+            name,
+            signature,
+            normalized_hash,
+            similarity_method,
+            similarity_fingerprint,
+            token_count,
+            blob_id,
+            json.dumps(metadata, sort_keys=True),
+        ),
     )
+    if similarity_fingerprint is not None:
+        connection.execute(
+            """
+            UPDATE entities
+            SET similarity_method = ?,
+                similarity_fingerprint = ?,
+                token_count = ?
+            WHERE kind = ? AND name = ? AND normalized_hash = ?
+            """,
+            (
+                similarity_method,
+                similarity_fingerprint,
+                token_count,
+                kind,
+                name,
+                normalized_hash,
+            ),
+        )
     row = connection.execute(
         "SELECT id FROM entities WHERE kind = ? AND name = ? AND normalized_hash = ?",
         (kind, name, normalized_hash),
@@ -126,6 +158,9 @@ def _index_function(connection: sqlite3.Connection, file_id: int, function: CFun
         name=function.name,
         signature=function.signature,
         normalized_hash=function.normalized_hash,
+        similarity_method=function.similarity_method,
+        similarity_fingerprint=function.similarity_fingerprint,
+        token_count=function.token_count,
         blob_id=blob_id,
         metadata={"parser": "tree-sitter-c", "parse_has_error": function.parse_has_error},
     )
@@ -164,6 +199,9 @@ def _index_artifact(
         name=Path(path).name,
         signature=None,
         normalized_hash=digest,
+        similarity_method=None,
+        similarity_fingerprint=None,
+        token_count=None,
         blob_id=blob_id,
         metadata={"identifier_count": len(identifiers), "scope": "file"},
     )

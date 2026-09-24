@@ -1,7 +1,10 @@
 from pathlib import Path
+import subprocess
 
 import pytest
+import yaml
 
+from codeatlas.config import load_config
 from codeatlas.errors import ConfigurationError
 from codeatlas.specification import SpecificationRequest, provider_from_config
 
@@ -79,3 +82,47 @@ def test_unknown_directory_pattern_placeholder_is_rejected(tmp_path: Path):
                 "directory_pattern": "{unknown}/{module}/d",
             }
         )
+
+
+def test_repository_backed_specification_tracks_configured_revision(tmp_path: Path):
+    source = tmp_path / "source"
+    directory = source / "agf" / "module_a" / "d"
+    directory.mkdir(parents=True)
+    (directory / "SPEC.txt").write_text("versioned requirement\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-b", "main", str(source)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(source), "config", "user.email", "test@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(source), "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(source), "commit", "-m", "spec"], check=True, capture_output=True)
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "database": "atlas.db",
+                "cache_dir": "cache",
+                "repositories": {
+                    "remote": {
+                        "module": "module_a",
+                        "url": source.as_uri(),
+                        "revisions": [{"name": "main", "ref": "main", "kind": "branch"}],
+                    }
+                },
+                "specification": {
+                    "provider": "folder_txt",
+                    "repository": "remote",
+                    "revision": "main",
+                    "directory_pattern": "agf/{module}/d",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = load_config(str(config_path))
+    provider = provider_from_config(
+        config.specification, base_dir=config.path.parent, codeatlas_config=config
+    )
+    result = provider.get(SpecificationRequest("module_a"))
+    assert result.available is True
+    assert result.content == "versioned requirement"
+    assert result.provenance["revision_verified"] is True
+    assert result.provenance["revision"] == "main"
