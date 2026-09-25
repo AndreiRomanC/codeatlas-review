@@ -4,6 +4,11 @@ CodeAtlas Review is a reusable AI Agent Skill for spec-grounded automotive softw
 
 The specification is authoritative; historical/reference code is evidence only.
 
+## Presentation
+
+The project overview is available in
+[`docs/presentations/OBD_AI_Review.pptx`](docs/presentations/OBD_AI_Review.pptx).
+
 Data lookups should use the Python CLIs directly. They return deterministic results
 without requiring semantic analysis.
 
